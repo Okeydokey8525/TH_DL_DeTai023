@@ -1,0 +1,861 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Multimodal ECG Attention Network - Bài 23</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --bg-gradient: radial-gradient(circle at 50% 50%, #1a0f2e 0%, #06020c 100%);
+            --glass-bg: rgba(255, 255, 255, 0.04);
+            --glass-border: rgba(255, 255, 255, 0.08);
+            --glass-hover: rgba(255, 255, 255, 0.08);
+            --text-primary: #f3f1f6;
+            --text-secondary: #9a94a6;
+            --accent-color: #7c4dff;
+            --accent-glow: rgba(124, 77, 255, 0.4);
+            --success: #00e676;
+            --warning: #ffde03;
+            --error: #ff1744;
+            --card-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+        }
+
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            background: var(--bg-gradient);
+            color: var(--text-primary);
+            min-height: 100vh;
+            overflow-x: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.1);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.15);
+            border-radius: 4px;
+        }
+
+        header {
+            padding: 20px 40px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--glass-border);
+            backdrop-filter: blur(10px);
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            background: rgba(6, 2, 12, 0.5);
+        }
+
+        .logo-section h1 {
+            font-family: 'Outfit', sans-serif;
+            font-size: 24px;
+            font-weight: 700;
+            background: linear-gradient(45deg, #7c4dff, #00e676);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .logo-section p {
+            font-size: 11px;
+            color: var(--text-secondary);
+            margin-top: 2px;
+        }
+
+        .status-badge {
+            background: var(--glass-bg);
+            border: 1px solid var(--glass-border);
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .status-indicator {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--warning);
+            box-shadow: 0 0 8px var(--warning);
+            display: inline-block;
+        }
+
+        .status-indicator.ready {
+            background: var(--success);
+            box-shadow: 0 0 8px var(--success);
+        }
+
+        .dashboard-container {
+            display: grid;
+            grid-template-columns: 320px 1fr;
+            flex-grow: 1;
+            height: calc(100vh - 78px);
+            overflow: hidden;
+        }
+
+        .sidebar {
+            border-right: 1px solid var(--glass-border);
+            background: rgba(255, 255, 255, 0.01);
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+            padding: 20px;
+        }
+
+        .sidebar h2 {
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--text-secondary);
+            margin-bottom: 15px;
+            font-weight: 600;
+        }
+
+        .sample-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .sample-item {
+            background: var(--glass-bg);
+            border: 1px solid var(--glass-border);
+            border-radius: 12px;
+            padding: 12px 16px;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .sample-item:hover {
+            background: var(--glass-hover);
+            transform: translateY(-2px);
+            border-color: rgba(124, 77, 255, 0.3);
+        }
+
+        .sample-item.active {
+            background: rgba(124, 77, 255, 0.1);
+            border-color: var(--accent-color);
+            box-shadow: 0 0 15px rgba(124, 77, 255, 0.2);
+        }
+
+        .sample-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 6px;
+        }
+
+        .sample-id {
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        .sample-gender {
+            font-size: 11px;
+            color: var(--text-secondary);
+            background: rgba(255, 255, 255, 0.05);
+            padding: 2px 6px;
+            border-radius: 4px;
+        }
+
+        .sample-labels {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px;
+            margin-top: 4px;
+        }
+
+        .label-pill {
+            font-size: 9px;
+            font-weight: 700;
+            padding: 1px 6px;
+            border-radius: 4px;
+            text-transform: uppercase;
+        }
+
+        .label-pill.norm { background: rgba(0, 230, 118, 0.15); color: var(--success); }
+        .label-pill.abnorm { background: rgba(255, 23, 68, 0.15); color: var(--error); }
+
+        .main-content {
+            padding: 30px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 25px;
+        }
+
+        .main-content > * {
+            flex-shrink: 0;
+        }
+
+        .glass-panel {
+            background: var(--glass-bg);
+            border: 1px solid var(--glass-border);
+            border-radius: 16px;
+            box-shadow: var(--card-shadow);
+            backdrop-filter: blur(16px);
+            padding: 24px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .glass-panel::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 1px;
+            background: linear-gradient(90deg, rgba(255,255,255,0.15) 0%, rgba(255,255,255,0) 100%);
+        }
+
+        .panel-title {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            color: var(--text-primary);
+        }
+
+        .demographics-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 15px;
+        }
+
+        .demo-card {
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid rgba(255, 255, 255, 0.04);
+            border-radius: 12px;
+            padding: 16px;
+            text-align: center;
+        }
+
+        .demo-label {
+            font-size: 11px;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 6px;
+        }
+
+        .demo-value {
+            font-family: 'Outfit', sans-serif;
+            font-size: 22px;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .chart-controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-bottom: 15px;
+        }
+
+        .lead-btn {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--glass-border);
+            color: var(--text-secondary);
+            padding: 6px 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 11px;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+
+        .lead-btn:hover {
+            background: rgba(255, 255, 255, 0.1);
+            color: var(--text-primary);
+        }
+
+        .lead-btn.active {
+            background: var(--accent-color);
+            border-color: var(--accent-color);
+            color: white;
+            box-shadow: 0 0 10px rgba(124, 77, 255, 0.3);
+        }
+
+        .chart-container {
+            height: 320px;
+            position: relative;
+            width: 100%;
+        }
+
+        .results-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        .prob-bar-container {
+            margin-bottom: 14px;
+        }
+
+        .prob-bar-label {
+            display: flex;
+            justify-content: space-between;
+            font-size: 12px;
+            margin-bottom: 4px;
+        }
+
+        .prob-bar-track {
+            height: 8px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .prob-bar-fill {
+            height: 100%;
+            background: var(--accent-color);
+            width: 0%;
+            border-radius: 4px;
+            transition: width 1s cubic-bezier(0.1, 0.8, 0.25, 1);
+        }
+
+        .prob-bar-fill.high {
+            background: linear-gradient(90deg, #ff1744, #ff5252);
+        }
+
+        .prob-bar-fill.normal {
+            background: linear-gradient(90deg, #00e676, #69f0ae);
+        }
+
+        .attn-circles-container {
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            margin-top: 15px;
+        }
+
+        .attn-circle-card {
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .circle-progress {
+            position: relative;
+            width: 100px;
+            height: 100px;
+        }
+
+        .circle-progress svg {
+            width: 100%;
+            height: 100%;
+            transform: rotate(-90deg);
+        }
+
+        .circle-bg {
+            fill: none;
+            stroke: rgba(255, 255, 255, 0.03);
+            stroke-width: 8;
+        }
+
+        .circle-fill {
+            fill: none;
+            stroke: var(--accent-color);
+            stroke-width: 8;
+            stroke-dasharray: 283;
+            stroke-dashoffset: 283;
+            stroke-linecap: round;
+            transition: stroke-dashoffset 1.2s ease-in-out;
+        }
+
+        .circle-text {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-family: 'Outfit', sans-serif;
+            font-size: 18px;
+            font-weight: 600;
+        }
+
+        .circle-title {
+            font-size: 12px;
+            color: var(--text-secondary);
+            font-weight: 500;
+        }
+
+        .predict-btn {
+            background: linear-gradient(135deg, #7c4dff 0%, #3f51b5 100%);
+            border: none;
+            color: white;
+            padding: 14px 28px;
+            border-radius: 30px;
+            font-family: 'Outfit', sans-serif;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            box-shadow: 0 4px 15px rgba(124, 77, 255, 0.4);
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin: 0 auto;
+            margin-top: 10px;
+        }
+
+        .predict-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(124, 77, 255, 0.6);
+        }
+
+        .predict-btn:active {
+            transform: translateY(0);
+        }
+
+        .pulse {
+            animation: pulse-animation 2s infinite;
+        }
+
+        @keyframes pulse-animation {
+            0% {
+                box-shadow: 0 0 0 0 rgba(124, 77, 255, 0.4);
+            }
+            70% {
+                box-shadow: 0 0 0 10px rgba(124, 77, 255, 0);
+            }
+            100% {
+                box-shadow: 0 0 0 0 rgba(124, 77, 255, 0);
+            }
+        }
+
+        .info-card {
+            background: rgba(124, 77, 255, 0.05);
+            border-left: 4px solid var(--accent-color);
+            padding: 12px 18px;
+            border-radius: 0 8px 8px 0;
+            font-size: 12px;
+            color: var(--text-secondary);
+            line-height: 1.6;
+        }
+        
+        .info-card strong {
+            color: var(--text-primary);
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div class="logo-section">
+            <h1>Hệ Thống Phân Tích ECG Đa Nguồn - Bài Tập 23</h1>
+            <p>Mô hình đa nhánh (Tín hiệu 1D, Đồ thị 2D, Chỉ số lâm sàng) kết hợp Modality Attention Fusion</p>
+        </div>
+        <div class="status-badge">
+            <span class="status-indicator" id="status-indicator"></span>
+            <span id="status-text">Đang kết nối...</span>
+        </div>
+    </header>
+
+    <div class="dashboard-container">
+        <div class="sidebar">
+            <h2>Mẫu Điện Tâm Đồ (Test Set)</h2>
+            <div class="sample-list" id="sample-list">
+                <div style="text-align: center; color: var(--text-secondary); padding-top: 20px;">Đang tải danh sách...</div>
+            </div>
+        </div>
+
+        <div class="main-content">
+            <div class="glass-panel">
+                <div class="panel-title">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+                    Thông Tin Nhân Khẩu Học Bệnh Nhân (Tabular Metadata)
+                </div>
+                <div class="demographics-grid">
+                    <div class="demo-card">
+                        <div class="demo-label">Mã ECG</div>
+                        <div class="demo-value" id="val-ecg-id">-</div>
+                    </div>
+                    <div class="demo-card">
+                        <div class="demo-label">Tuổi</div>
+                        <div class="demo-value" id="val-age">-</div>
+                    </div>
+                    <div class="demo-card">
+                        <div class="demo-label">Giới Tính</div>
+                        <div class="demo-value" id="val-sex">-</div>
+                    </div>
+                    <div class="demo-card">
+                        <div class="demo-label">Chiều Cao & Cân Nặng</div>
+                        <div class="demo-value" id="val-size">-</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="glass-panel">
+                <div class="panel-title">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"></path></svg>
+                    Đồ Thị Sóng Điện Tâm Đồ 12 Kênh ECG (Time-Series Sequence)
+                </div>
+                <div class="chart-controls" id="lead-selectors">
+                </div>
+                <div class="chart-container">
+                    <canvas id="ecgChart"></canvas>
+                </div>
+            </div>
+
+            <button class="predict-btn pulse" id="btn-predict">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                Chạy Chẩn Đoán Dự Đoán Đa Nguồn (Bài 23)
+            </button>
+
+            <div class="results-grid">
+                <div class="glass-panel">
+                    <div class="panel-title">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="9" y1="9" x2="15" y2="9"></line><line x1="9" y1="13" x2="15" y2="13"></line><line x1="9" y1="17" x2="15" y2="17"></line></svg>
+                        Xác Suất Chẩn Đoán Bệnh Lý Đa Nguồn
+                    </div>
+                    <div id="results-bai23">
+                        <div style="color: var(--text-secondary); font-size: 12px; padding: 20px 0;">Nhấn "Chạy Chẩn Đoán" để xem...</div>
+                    </div>
+                </div>
+
+                <div class="glass-panel attention-panel">
+                    <div class="panel-title">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="6"></circle><circle cx="12" cy="12" r="2"></circle></svg>
+                        Trọng Số Attention Của Từng Nguồn Bàn Giao (Modality Weights)
+                    </div>
+                    <p style="font-size: 12px; color: var(--text-secondary); margin-bottom: 15px; line-height: 1.5;">
+                        Mô hình tự động học cách phân bổ trọng số attention động cho 3 nguồn để tối ưu hóa quyết định chẩn đoán lâm sàng cho từng bệnh lý:
+                    </p>
+                    <div class="attn-circles-container">
+                        <div class="attn-circle-card">
+                            <div class="circle-progress">
+                                <svg>
+                                    <circle class="circle-bg" cx="50" cy="50" r="45"></circle>
+                                    <circle class="circle-fill" id="circle-seq" cx="50" cy="50" r="45"></circle>
+                                </svg>
+                                <div class="circle-text" id="text-attn-seq">0%</div>
+                            </div>
+                            <span class="circle-title">ECG Sóng (Sequence)</span>
+                        </div>
+                        
+                        <div class="attn-circle-card">
+                            <div class="circle-progress">
+                                <svg>
+                                    <circle class="circle-bg" cx="50" cy="50" r="45"></circle>
+                                    <circle class="circle-fill" id="circle-img" cx="50" cy="50" r="45" style="stroke: #00e676;"></circle>
+                                </svg>
+                                <div class="circle-text" id="text-attn-img">0%</div>
+                            </div>
+                            <span class="circle-title">Ảnh Đồ Thị (Image)</span>
+                        </div>
+
+                        <div class="attn-circle-card">
+                            <div class="circle-progress">
+                                <svg>
+                                    <circle class="circle-bg" cx="50" cy="50" r="45"></circle>
+                                    <circle class="circle-fill" id="circle-tab" cx="50" cy="50" r="45" style="stroke: #ffde03;"></circle>
+                                </svg>
+                                <div class="circle-text" id="text-attn-tab">0%</div>
+                            </div>
+                            <span class="circle-title">Thông Số Số (Tabular)</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="info-card">
+                <strong>Chú thích các ký hiệu chẩn đoán:</strong><br>
+                • <strong>NORM</strong>: Điện tâm đồ bình thường (Normal ECG).<br>
+                • <strong>MI</strong>: Nhồi máu cơ tim (Myocardial Infarction).<br>
+                • <strong>STTC</strong>: Biến đổi sóng ST/T (ST/T abnormalities).<br>
+                • <strong>CD</strong>: Rối loạn dẫn truyền cơ tim (Conduction Disturbance).<br>
+                • <strong>HYP</strong>: Phì đại buồng tim (Hypertrophy).
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const CLASS_NAMES = ['NORM', 'MI', 'STTC', 'CD', 'HYP'];
+        const CLASS_FULL = {
+            'NORM': 'Bình thường (NORM)',
+            'MI': 'Nhồi máu cơ tim (MI)',
+            'STTC': 'Biến đổi ST/T (STTC)',
+            'CD': 'Rối loạn dẫn truyền (CD)',
+            'HYP': 'Phì đại tim (HYP)'
+        };
+
+        let currentIdx = 0;
+        let ecgData = null;
+        let chart = null;
+        let activeLeads = [true, false, false, false, false, false, false, false, false, false, false, false];
+        const leadNames = ['I', 'II', 'III', 'aVR', 'aVL', 'aVF', 'V1', 'V2', 'V3', 'V4', 'V5', 'V6'];
+
+        document.addEventListener('DOMContentLoaded', () => {
+            checkStatus();
+            loadSamples();
+            setupLeadSelectors();
+            document.getElementById('btn-predict').addEventListener('click', runPrediction);
+        });
+
+        function checkStatus() {
+            fetch('/api/status')
+                .then(res => res.json())
+                .then(data => {
+                    const indicator = document.getElementById('status-indicator');
+                    const text = document.getElementById('status-text');
+                    if (data.status === 'ready') {
+                        indicator.className = 'status-indicator ready';
+                        text.innerText = 'PyTorch Model: Sẵn sàng (Real Inference)';
+                    } else {
+                        indicator.className = 'status-indicator';
+                        text.innerText = 'Chạy thử nghiệm (Mock Mode Demo)';
+                    }
+                });
+        }
+
+        function loadSamples() {
+            fetch('/api/samples')
+                .then(res => res.json())
+                .then(samples => {
+                    const list = document.getElementById('sample-list');
+                    list.innerHTML = '';
+                    
+                    samples.forEach((sample, i) => {
+                        const div = document.createElement('div');
+                        div.className = `sample-item ${i === 0 ? 'active' : ''}`;
+                        div.setAttribute('data-index', sample.index);
+                        
+                        let badgeHTML = '';
+                        sample.actual.forEach(lbl => {
+                            const type = lbl === 'NORM' ? 'norm' : 'abnorm';
+                            badgeHTML += `<span class="label-pill ${type}">${lbl}</span>`;
+                        });
+                        
+                        div.innerHTML = `
+                            <div class="sample-header">
+                                <span class="sample-id">ID: #${sample.ecg_id}</span>
+                                <span class="sample-gender">${sample.sex}</span>
+                            </div>
+                            <div class="sample-labels">
+                                ${badgeHTML}
+                            </div>
+                        `;
+                        
+                        div.addEventListener('click', () => {
+                            document.querySelectorAll('.sample-item').forEach(item => item.classList.remove('active'));
+                            div.classList.add('active');
+                            selectSample(sample.index);
+                        });
+                        list.appendChild(div);
+                    });
+                    
+                    if (samples.length > 0) {
+                        selectSample(samples[0].index);
+                    }
+                });
+        }
+
+        function setupLeadSelectors() {
+            const container = document.getElementById('lead-selectors');
+            container.innerHTML = '';
+            leadNames.forEach((name, i) => {
+                const btn = document.createElement('button');
+                btn.className = `lead-btn ${activeLeads[i] ? 'active' : ''}`;
+                btn.innerText = `Lead ${name}`;
+                btn.addEventListener('click', () => {
+                    activeLeads[i] = !activeLeads[i];
+                    btn.classList.toggle('active');
+                    updateChartWaveforms();
+                });
+                container.appendChild(btn);
+            });
+        }
+
+        function selectSample(idx) {
+            currentIdx = idx;
+            resetPredictionResults();
+            
+            fetch(`/api/ecg/${idx}`)
+                .then(res => res.json())
+                .then(data => {
+                    ecgData = data;
+                    document.getElementById('val-ecg-id').innerText = `#${data.ecg_id}`;
+                    document.getElementById('val-age').innerText = `${data.age} tuổi`;
+                    document.getElementById('val-sex').innerText = data.sex === 'Male' ? 'Nam' : 'Nữ';
+                    document.getElementById('val-size').innerText = `${data.height} cm / ${data.weight} kg`;
+                    renderChart();
+                });
+        }
+
+        function renderChart() {
+            const ctx = document.getElementById('ecgChart').getContext('2d');
+            if (chart) chart.destroy();
+            
+            const datasets = [];
+            const labels = Array.from({length: 1000}, (_, i) => (i / 100).toFixed(2));
+            
+            leadNames.forEach((name, leadIdx) => {
+                const leadSignal = ecgData.signal.map(step => step[leadIdx]);
+                const offset = (11 - leadIdx) * 3.5;
+                const offsetSignal = leadSignal.map(val => val + offset);
+                
+                datasets.push({
+                    label: `Lead ${name}`,
+                    data: offsetSignal,
+                    borderColor: getLeadColor(leadIdx),
+                    borderWidth: 1.2,
+                    pointRadius: 0,
+                    hidden: !activeLeads[leadIdx],
+                    tension: 0.1
+                });
+            });
+            
+            chart = new Chart(ctx, {
+                type: 'line',
+                data: { labels: labels, datasets: datasets },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: { duration: 400 },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: { mode: 'index', intersect: false }
+                    },
+                    scales: {
+                        x: {
+                            grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                            ticks: { color: 'rgba(255, 255, 255, 0.4)', font: { size: 10 }, maxTicksLimit: 20 },
+                            title: { display: true, text: 'Thời gian (giây)', color: 'rgba(255, 255, 255, 0.5)' }
+                        },
+                        y: { grid: { color: 'rgba(255, 255, 255, 0.05)' }, ticks: { display: false } }
+                    }
+                }
+            });
+        }
+
+        function updateChartWaveforms() {
+            if (!chart) return;
+            activeLeads.forEach((isActive, leadIdx) => {
+                chart.setDatasetVisibility(leadIdx, isActive);
+            });
+            chart.update('none');
+        }
+
+        function getLeadColor(index) {
+            const colors = [
+                '#ff1744', '#7c4dff', '#00e5ff', '#00e676', '#ffde03', '#ff9100',
+                '#ff4081', '#00b0ff', '#1de9b6', '#aeea00', '#d500f9', '#eceff1'
+            ];
+            return colors[index % colors.length];
+        }
+
+        function resetPredictionResults() {
+            document.getElementById('results-bai23').innerHTML = '<div style="color: var(--text-secondary); font-size: 12px; padding: 20px 0;">Nhấn "Chạy Chẩn Đoán" để xem...</div>';
+            updateAttentionCircle('seq', 0);
+            updateAttentionCircle('img', 0);
+            updateAttentionCircle('tab', 0);
+        }
+
+        function runPrediction() {
+            const btn = document.getElementById('btn-predict');
+            btn.innerText = "Đang phân tích...";
+            btn.disabled = true;
+            
+            fetch(`/api/predict/${currentIdx}`)
+                .then(res => res.json())
+                .then(data => {
+                    btn.innerHTML = `
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                        Chạy Chẩn Đoán Dự Đoán Đa Nguồn (Bài 23)
+                    `;
+                    btn.disabled = false;
+                    
+                    renderProbBars('results-bai23', data.predict_bai23);
+                    animateAttentionCircle('seq', data.attention.sequence);
+                    animateAttentionCircle('img', data.attention.image);
+                    animateAttentionCircle('tab', data.attention.tabular);
+                })
+                .catch(err => {
+                    btn.innerText = "Lỗi kết nối";
+                    btn.disabled = false;
+                    console.error(err);
+                });
+        }
+
+        function renderProbBars(containerId, predictions) {
+            const container = document.getElementById(containerId);
+            container.innerHTML = '';
+            
+            CLASS_NAMES.forEach(cls => {
+                const prob = predictions[cls];
+                const pct = (prob * 100).toFixed(1);
+                
+                let fillClass = '';
+                if (cls === 'NORM') {
+                    fillClass = prob > 0.5 ? 'normal' : '';
+                } else {
+                    fillClass = prob > 0.4 ? 'high' : '';
+                }
+                
+                const div = document.createElement('div');
+                div.className = 'prob-bar-container';
+                div.innerHTML = `
+                    <div class="prob-bar-label">
+                        <span><strong>${cls}</strong> (${CLASS_FULL[cls]})</span>
+                        <span>${pct}%</span>
+                    </div>
+                    <div class="prob-bar-track">
+                        <div class="prob-bar-fill ${fillClass}" id="${containerId}-${cls}" style="width: 0%;"></div>
+                    </div>
+                `;
+                container.appendChild(div);
+                
+                setTimeout(() => {
+                    const fill = document.getElementById(`${containerId}-${cls}`);
+                    if (fill) fill.style.width = `${pct}%`;
+                }, 50);
+            });
+        }
+
+        function updateAttentionCircle(id, value) {
+            const circle = document.getElementById(`circle-${id}`);
+            const text = document.getElementById(`text-attn-${id}`);
+            const offset = 283 - (value * 283);
+            circle.style.strokeDashoffset = offset;
+            text.innerText = `${(value * 100).toFixed(0)}%`;
+        }
+
+        // Hiệu ứng chữ số
+        function animateAttentionCircle(id, targetVal) {
+            let curVal = 0;
+            const step = targetVal / 20;
+            const interval = setInterval(() => {
+                curVal += step;
+                if (curVal >= targetVal) {
+                    curVal = targetVal;
+                    clearInterval(interval);
+                }
+                updateAttentionCircle(id, curVal);
+            }, 30);
+        }
+    </script>
+</body>
+</html>
